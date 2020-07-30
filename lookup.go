@@ -29,9 +29,8 @@ type InputParam struct {
 	value interface{}
 }
 
-// https://docs.aws.amazon.com/general/latest/gr/aws-arns-and-namespaces.html#arns-syntax
-// arn:partition:service:region:account-id:resource-id
-var resourceId = func(id string) string {
+// physicalResourceId is the id returned by the cloudformation API
+var physicalResourceId = func(id string) string {
 	return id
 }
 
@@ -147,10 +146,11 @@ func wrap(tagLookup interface{}, parameters...InputParam) func(ctx context.Conte
 					return tagsMap, nil
 				}
 				// some API's return an array of objects with Key & Value fields
-				tags := map[string]string{}
+				var tags map[string]string = nil
 				for _, tagsField := range []string{"Tags","TagSet","TagList"} {
 					fieldValue := outValue.FieldByName(tagsField)
 					if tagsField == field.Name && fieldValue.Kind() == reflect.Slice {
+						tags = make(map[string]string, fieldValue.Len())
 						for i := 0; i < fieldValue.Len(); i++ {
 							item := fieldValue.Index(i)
 							key := item.FieldByName("Key").Elem().String()
@@ -160,7 +160,7 @@ func wrap(tagLookup interface{}, parameters...InputParam) func(ctx context.Conte
 					}
 				}
 
-				if len(tags) > 0 {
+				if tags != nil {
 					return tags, nil
 				} else {
 					return nil, fmt.Errorf("unable to cast %s.%s: %s",
