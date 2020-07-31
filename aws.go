@@ -2,23 +2,54 @@ package main
 
 import (
 	"context"
+	"errors"
+	"fmt"
 	"github.com/aws/aws-sdk-go-v2/aws"
+	"github.com/aws/aws-sdk-go-v2/aws/awserr"
 	"github.com/aws/aws-sdk-go-v2/service/cloudformation"
+	"github.com/aws/aws-sdk-go-v2/service/configservice"
+	"github.com/aws/aws-sdk-go-v2/service/glue"
 	"github.com/aws/aws-sdk-go-v2/service/servicecatalog"
 	"github.com/aws/aws-sdk-go-v2/service/sts"
 	"strings"
 )
 
-func getStackResources(ctx context.Context, config aws.Config, search *string) []cloudformation.StackResource {
+var ignoreErrors = map[string]struct{}{
+	configservice.ErrCodeResourceNotFoundException: {},
+	glue.ErrCodeEntityNotFoundException:            {},
+	ErrCodeTagsNotSupportedException:               {},
+}
+
+type ResourceType string
+
+var ResourceTypeCloudFormationProduct ResourceType = "AWS::ServiceCatalog::CloudFormationProduct"
+var ResourceTypeCustomResource ResourceType = "Custom::"
+
+const ErrCodeTagsNotSupportedException = "TagsNotSupportedException"
+
+type TagsNotSupportedError struct {
+	msg string
+}
+func (e *TagsNotSupportedError) Error() string {
+	return fmt.Sprintln(e.Code(), e.Message())
+}
+func (e *TagsNotSupportedError) Code() string {
+	return fmt.Sprint(ErrCodeTagsNotSupportedException)
+}
+func (e *TagsNotSupportedError) Message() string {
+	return fmt.Sprint(e.msg, " does not support tagging")
+}
+
+func getStackResources(ctx context.Context, config aws.Config, search string) []cloudformation.StackResource {
 	sc := *servicecatalog.New(config)
 	cf := *cloudformation.New(config)
 
 	var resources []cloudformation.StackResource
 	for _, stack := range listStacks(ctx, cf, search) {
-		for _, resource := range describeStackResources(ctx, cf, stack.StackName) {
-			if "AWS::ServiceCatalog::CloudFormationProduct" == *resource.ResourceType {
-				for _, product := range searchProvisionedProducts(ctx, sc, resource.PhysicalResourceId) {
-					resources = append(resources, getStackResources(ctx, config, product.Id)...)
+		for _, resource := range describeStackResources(ctx, cf, *stack.StackName) {
+			if string(ResourceTypeCloudFormationProduct) == *resource.ResourceType {
+				for _, product := range searchProvisionedProducts(ctx, sc, *resource.PhysicalResourceId) {
+					resources = append(resources, getStackResources(ctx, config, *product.Id)...)
 				}
 			} else {
 				resources = append(resources, resource)
@@ -28,7 +59,7 @@ func getStackResources(ctx context.Context, config aws.Config, search *string) [
 	return resources
 }
 
-func searchProvisionedProducts(ctx context.Context, client servicecatalog.Client, id *string) []servicecatalog.ProvisionedProductAttribute {
+func searchProvisionedProducts(ctx context.Context, client servicecatalog.Client, id string) []servicecatalog.ProvisionedProductAttribute {
 	var provisionedProducts []servicecatalog.ProvisionedProductAttribute
 	var accessLevelFilterValueSelf = "self"
 	searchQuery, err := servicecatalog.ProvisionedProductViewFilterBySearchQuery.MarshalValue()
@@ -45,7 +76,7 @@ func searchProvisionedProducts(ctx context.Context, client servicecatalog.Client
 				Value: &accessLevelFilterValueSelf,
 			},
 			Filters: map[string][]string{
-				searchQuery: {*id},
+				searchQuery: {id},
 			},
 		}
 		request := client.SearchProvisionedProductsRequest(input)
@@ -65,9 +96,9 @@ func searchProvisionedProducts(ctx context.Context, client servicecatalog.Client
 	return provisionedProducts
 }
 
-func describeStackResources(ctx context.Context, client cloudformation.Client, stackName *string) []cloudformation.StackResource {
+func describeStackResources(ctx context.Context, client cloudformation.Client, stackName string) []cloudformation.StackResource {
 	input := &cloudformation.DescribeStackResourcesInput{
-		StackName: stackName,
+		StackName: &stackName,
 	}
 	request := client.DescribeStackResourcesRequest(input)
 	response, err := request.Send(ctx)
@@ -77,7 +108,7 @@ func describeStackResources(ctx context.Context, client cloudformation.Client, s
 	return response.StackResources
 }
 
-func listStacks(ctx context.Context, client cloudformation.Client, search *string) []cloudformation.StackSummary {
+func listStacks(ctx context.Context, client cloudformation.Client, search string) []cloudformation.StackSummary {
 	var stacks []cloudformation.StackSummary
 	var token *string
 	for {
@@ -97,7 +128,7 @@ func listStacks(ctx context.Context, client cloudformation.Client, search *strin
 
 		token = response.NextToken
 		for _, s := range response.StackSummaries {
-			if strings.Contains(*s.StackName, *search) {
+			if strings.Contains(*s.StackName, search) {
 				stacks = append(stacks, s)
 			}
 		}
@@ -116,4 +147,17 @@ func getAccount(ctx context.Context, config aws.Config) string {
 		panic(err)
 	}
 	return *response.Account
+}
+
+func ignoreError(err error) bool {
+	var ae awserr.Error
+	if ok := errors.As(err, &ae); ok {
+		_, ignored := ignoreErrors[ae.Code()]
+		return ignored
+	}
+	return false
+}
+
+func customResource(resourceType string) bool {
+	return strings.HasPrefix(resourceType, string(ResourceTypeCustomResource))
 }

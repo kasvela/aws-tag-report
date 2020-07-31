@@ -11,7 +11,7 @@ type Report struct {
 	w *csv.Writer
 }
 
-var header = []string {"Type", "Resource Name", "Tags", "Missing Tags", "Created By", "Classic Coverage",
+var header = []string {"Project", "Type", "Resource Name", "Tags", "Missing Tags", "Created By", "Classic Coverage",
 	"Modern Coverage",}
 var classic = []string {"Name","BU","Product","Repository","TeamID","Environment"}
 var modern = []string {"Name","rlg:business-unit","rlg:product","rlg:application","rlg:repository","rlg:techdata-team",
@@ -33,6 +33,7 @@ func (r Report) Add(resourceType string, name string, stack string, search strin
 	hasClassic, _ := extractKeys(tags, classic)
 
 	err := r.w.Write([]string {
+		search,
 		extractType(resourceType),
 		name,
 		strings.Join(hasModern, ","),
@@ -47,8 +48,9 @@ func (r Report) Add(resourceType string, name string, stack string, search strin
 	}
 }
 
-func (r Report) AddNotSupported(resourceType string, name string, stack string, search string) {
+func (r Report) NotSupported(resourceType string, name string, stack string, search string) {
 	err := r.w.Write([]string {
+		search,
 		extractType(resourceType),
 		name,
 		"",

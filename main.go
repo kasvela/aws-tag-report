@@ -2,15 +2,14 @@ package main
 
 import (
 	"context"
-	"errors"
 	"fmt"
 	"github.com/aws/aws-sdk-go-v2/aws"
-	"github.com/aws/aws-sdk-go-v2/aws/awserr"
 	"github.com/aws/aws-sdk-go-v2/aws/external"
 	"github.com/aws/aws-sdk-go-v2/service/cloudwatch"
 	"github.com/aws/aws-sdk-go-v2/service/cloudwatchevents"
 	"github.com/aws/aws-sdk-go-v2/service/cloudwatchlogs"
 	"github.com/aws/aws-sdk-go-v2/service/configservice"
+	"github.com/aws/aws-sdk-go-v2/service/databasemigrationservice"
 	"github.com/aws/aws-sdk-go-v2/service/dynamodb"
 	"github.com/aws/aws-sdk-go-v2/service/ec2"
 	"github.com/aws/aws-sdk-go-v2/service/firehose"
@@ -24,7 +23,6 @@ import (
 	"github.com/aws/aws-sdk-go-v2/service/ssm"
 	"os"
 	"reflect"
-	"strings"
 )
 
 var (
@@ -32,10 +30,11 @@ var (
 )
 
 func main() {
-	if len(os.Args) < 2 {
-		fmt.Println("usage: aws-tag-report searchString > reportFile" +
-			"\n\tsearchString: will select any cloudformation stack with searchString within its name" +
-			"\n\treportFile: file to redirect  csv output")
+	if len(os.Args) <= 1 {
+		fmt.Println("usage: aws-tag-report s1 [s2 ...] > report" +
+			"\n  list resources for each matched stack and get tags for each res" +
+			"\n  s1 s2 ...: substrings used to match cloudformation stack names" +
+			"\n  report: file to redirect csv output")
 		return
 	}
 
@@ -60,6 +59,7 @@ func main() {
 	cloudwatcheventsClient := cloudwatchevents.New(cfg)
 	configserviceClient := configservice.New(cfg)
 	kmsClient := kms.New(cfg)
+	dmsClient := databasemigrationservice.New(cfg)
 
 	region := cfg.Region
 	account := getAccount(ctx, cfg)
@@ -151,6 +151,10 @@ func main() {
 		"AWS::KMS::Key":
 			wrap(kmsClient.ListResourceTagsRequest,
 				InputParam{"KeyId", physicalResourceId}),
+		// DMS,
+		"AWS::DMS::EventSubscription":
+			wrap(dmsClient.ListTagsForResourceRequest,
+				InputParam{"ResourceArn", arnF3(region, account, "dms", "es")}),
 
 		//////// TAGS NOT SUPPORTED ////////
 		// Lambda
@@ -186,47 +190,39 @@ func main() {
 		"AWS::CloudFormation::Macro": nop("AWS::CloudFormation::Macro"),
 	}
 
-	search := &os.Args[1]
+	searchs := os.Args[1:]
 	report := NewReporter()
 
-	for r, resource := range getStackResources(ctx, cfg, search) {
-		// custom resources do not support tags
-		if strings.HasPrefix(*resource.ResourceType, "Custom::") {
-			err := TagsNotSupportedError{*resource.ResourceType}
-			fmt.Fprintln(os.Stderr, err.Error())
-			report.AddNotSupported(*resource.ResourceType, *resource.PhysicalResourceId, *resource.StackName, *search)
-			continue
-		}
-		// get the proper tag lookup function
-		if lookup, ok := lookups[*resource.ResourceType]; ok {
-			tags, err := lookup(ctx, cfg, *resource.PhysicalResourceId)
-			if err == nil {
-				// tags lookup succeeded
-				report.Add(*resource.ResourceType, *resource.PhysicalResourceId, *resource.StackName, *search, tags)
-			} else {
-				// some errors should not stop processing resources
-				var ae awserr.Error
-				if ok := errors.As(err, &ae); ok && (
-						ae.Code() == configservice.ErrCodeResourceNotFoundException ||
-						ae.Code() == glue.ErrCodeEntityNotFoundException){
-					fmt.Fprintln(os.Stderr, ae.Error())
-					report.AddNotSupported(*resource.ResourceType, *resource.PhysicalResourceId, *resource.StackName, *search)
-				} else if ne, ok := err.(*TagsNotSupportedError); ok {
-					fmt.Fprintln(os.Stderr, ne.Error())
-					report.AddNotSupported(*resource.ResourceType, *resource.PhysicalResourceId, *resource.StackName, *search)
-				} else {
-					fmt.Fprintln(os.Stderr, reflect.TypeOf(err), Prettify(resource))
-					panic(err.Error())
-				}
+	for _, s := range searchs {
+		for i, res := range getStackResources(ctx, cfg, s) {
+			if customResource(*res.ResourceType) {
+				fmt.Fprintln(os.Stderr, (&TagsNotSupportedError{*res.ResourceType}).Error())
+				report.NotSupported(*res.ResourceType, *res.LogicalResourceId, *res.StackName, s)
+				continue
 			}
-		} else {
-			err := NotImplementedError{*resource.ResourceType}
-			fmt.Fprintln(os.Stderr, err.Error(), Prettify(resource))
-			panic(err.Error())
-		}
 
-		if r % 1000 == 0 {
-			report.Write()
+			if lookup, ok := lookups[*res.ResourceType]; ok {
+				tags, err := lookup(ctx, cfg, *res.PhysicalResourceId)
+				if err == nil {
+					report.Add(*res.ResourceType, *res.PhysicalResourceId, *res.StackName, s, tags)
+				} else {
+					if ignoreError(err) {
+						fmt.Fprintln(os.Stderr, err.Error())
+						report.NotSupported(*res.ResourceType, *res.PhysicalResourceId, *res.StackName, s)
+					} else {
+						fmt.Fprintln(os.Stderr, reflect.TypeOf(err), Prettify(res))
+						panic(err.Error())
+					}
+				}
+			} else {
+				err := NotImplementedError{*res.ResourceType}
+				fmt.Fprintln(os.Stderr, err.Error(), Prettify(res))
+				//panic(err.Error())
+			}
+
+			if i% 1000 == 0 {
+				report.Write()
+			}
 		}
 	}
 
