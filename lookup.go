@@ -7,14 +7,6 @@ import (
 	"reflect"
 )
 
-type TagsNotSupportedError struct {
-	msg string
-}
-
-func (e *TagsNotSupportedError) Error() string {
-	return fmt.Sprint(e.msg, " tags not supported")
-}
-
 type NotImplementedError struct {
 	msg string
 }
@@ -34,16 +26,13 @@ var physicalResourceId = func(id string) string {
 	return id
 }
 
-/*
 // https://docs.aws.amazon.com/general/latest/gr/aws-arns-and-namespaces.html#arns-syntax
 // arn:partition:service:region:account-id:resource-id
-arnF1 := func(service string) func(string) string {
+var arnF1 = func(region string, account string, service string) func(string) string {
 	return func(id string) string {
-		return fmt.Sprintf("arn:aws:%s:%s:%s:%s",
-			service, config.Region, getAccount(ctx, config), id)
+		return fmt.Sprintf("arn:aws:%s:%s:%s:%s", service, region, account, id)
 	}
 }
-*/
 
 // https://docs.aws.amazon.com/general/latest/gr/aws-arns-and-namespaces.html#arns-syntax
 // arn:partition:service:region:account-id:resource-type/resource-id
@@ -57,13 +46,6 @@ var arnF2 = func(region string, account string, service string, resource string)
 var arnF3 = func(region string, account string, service string, resource string) func(string) string {
 	return func(id string) string {
 		return fmt.Sprintf("arn:aws:%s:%s:%s:%s:%s", service, region, account, resource, id)
-	}
-}
-
-// For resources which don't support tagging
-func nop(resourceType string) func(context.Context, aws.Config, string) (map[string]string, error) {
-	return func(context.Context, aws.Config, string) (map[string]string, error) {
-		return nil, &TagsNotSupportedError{resourceType}
 	}
 }
 
@@ -112,6 +94,7 @@ func wrap(tagLookup interface{}, parameters...InputParam) func(ctx context.Conte
 		}
 
 		// each Request struct has a Send method to perform the call to AWS API
+		fmt.Println("Calling AWS with", reflect.ValueOf(input).MethodByName("String").Call(nil))
 		req := fn.Call([]reflect.Value{input})
 		out := req[0].MethodByName("Send").Call([]reflect.Value{reflect.ValueOf(ctx)})
 		if err, ok := out[1].Interface().(error); ok && err != nil {
