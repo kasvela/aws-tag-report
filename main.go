@@ -63,139 +63,150 @@ func main() {
 
 	region := cfg.Region
 	account := getAccount(ctx, cfg)
-	lookups := map[string]func(context.Context, aws.Config, string) (map[string]string, error) {
+	lookups := map[string]func(context.Context, aws.Config, string) (map[string]string, error){
 		// Lambda
 		"AWS::Lambda::Function":
-			wrap(lambdaClient.ListTagsRequest,
-				InputParam{"Resource", arnF3(region, account, "lambda", "function")}),
+		wrap(lambdaClient.ListTagsRequest,
+			InputParam{"Resource", arnF3(region, account, "lambda", "function")}),
 		// SSM
 		"AWS::SSM::Parameter":
-			wrap(ssmClient.ListTagsForResourceRequest,
-				InputParam{"ResourceId", physicalResourceId},
-				InputParam{"ResourceType", ssm.ResourceTypeForTaggingParameter}),
+		wrap(ssmClient.ListTagsForResourceRequest,
+			InputParam{"ResourceId", physicalResourceId},
+			InputParam{"ResourceType", ssm.ResourceTypeForTaggingParameter}),
 		// Service Catalog
 		"AWS::ServiceCatalog::CloudFormationProduct":
-			wrap(servicecatalogClient.DescribeProductRequest,
-				InputParam{"Id", physicalResourceId}),
+		wrap(servicecatalogClient.DescribeProductRequest,
+			InputParam{"Id", physicalResourceId}),
 		"AWS::ServiceCatalog::Portfolio":
-			wrap(servicecatalogClient.DescribePortfolioRequest,
-				InputParam{"Id", physicalResourceId}),
+		wrap(servicecatalogClient.DescribePortfolioRequest,
+			InputParam{"Id", physicalResourceId}),
 		// S3
 		"AWS::S3::Bucket":
-			wrap(s3Client.GetBucketTaggingRequest,
-				InputParam{"Bucket", physicalResourceId}),
+		wrap(s3Client.GetBucketTaggingRequest,
+			InputParam{"Bucket", physicalResourceId}),
 		// IAM
 		"AWS::IAM::Role":
-			wrap(iamClient.ListRoleTagsRequest,
-				InputParam{"RoleName", physicalResourceId}),
+		wrap(iamClient.ListRoleTagsRequest,
+			InputParam{"RoleName", physicalResourceId}),
 		// SNS
 		"AWS::SNS::Topic":
-			wrap(snsClient.ListTagsForResourceRequest,
-				InputParam{"ResourceArn", physicalResourceId}),
+		wrap(snsClient.ListTagsForResourceRequest,
+			InputParam{"ResourceArn", physicalResourceId}),
 		// EC2
 		"AWS::EC2::LaunchTemplate":
-			wrap(ec2Client.DescribeTagsRequest,
-				InputParam{"Filters",
-					[]ec2.Filter{{Name: &resourceType, Values: []string{"launch-template"}},}}),
+		wrap(ec2Client.DescribeTagsRequest,
+			InputParam{"Filters",
+				[]ec2.Filter{{Name: &resourceType, Values: []string{"launch-template"}},}}),
 		"AWS::EC2::RouteTable":
 		wrap(ec2Client.DescribeTagsRequest,
 			InputParam{"Filters",
 				[]ec2.Filter{{Name: &resourceType, Values: []string{"route-table"}},}}),
 		"AWS::EC2::SecurityGroup":
-			wrap(ec2Client.DescribeTagsRequest,
-				InputParam{"Filters",
-					[]ec2.Filter{{Name: &resourceType, Values: []string{"security-group"}},}}),
+		wrap(ec2Client.DescribeTagsRequest,
+			InputParam{"Filters",
+				[]ec2.Filter{{Name: &resourceType, Values: []string{"security-group"}},}}),
 		"AWS::EC2::Subnet":
-			wrap(ec2Client.DescribeTagsRequest,
-				InputParam{"Filters",
-					[]ec2.Filter{{Name: &resourceType, Values: []string{"subnet"}},}}),
+		wrap(ec2Client.DescribeTagsRequest,
+			InputParam{"Filters",
+				[]ec2.Filter{{Name: &resourceType, Values: []string{"subnet"}},}}),
 		"AWS::EC2::VPC":
-			wrap(ec2Client.DescribeTagsRequest,
-				InputParam{"Filters",
-					[]ec2.Filter{{Name: &resourceType, Values: []string{"vpc"}},}}),
+		wrap(ec2Client.DescribeTagsRequest,
+			InputParam{"Filters",
+				[]ec2.Filter{{Name: &resourceType, Values: []string{"vpc"}},}}),
 		// Glue
 		"AWS::Glue::Crawler":
-			wrap(glueClient.GetTagsRequest,
-				InputParam{"ResourceArn", arnF2(region, account, "glue", "crawler")}),
+		wrap(glueClient.GetTagsRequest,
+			InputParam{"ResourceArn", arnF2(region, account, "glue", "crawler")}),
 		"AWS::Glue::Job":
-			wrap(glueClient.GetTagsRequest,
-				InputParam{"ResourceArn", arnF2(region, account, "glue", "job")}),
+		wrap(glueClient.GetTagsRequest,
+			InputParam{"ResourceArn", arnF2(region, account, "glue", "job")}),
 		"AWS::Glue::Trigger":
-			wrap(glueClient.GetTagsRequest,
-				InputParam{"ResourceArn", arnF2(region, account, "glue", "trigger")}),
+		wrap(glueClient.GetTagsRequest,
+			InputParam{"ResourceArn", arnF2(region, account, "glue", "trigger")}),
 		// DynamoDB
 		"AWS::DynamoDB::Table":
-			wrap(dynamodbClient.ListTagsOfResourceRequest,
-				InputParam{"ResourceArn", arnF2(region, account, "dynamodb", "table")}),
+		wrap(dynamodbClient.ListTagsOfResourceRequest,
+			InputParam{"ResourceArn", arnF2(region, account, "dynamodb", "table")}),
 		// Kinesis Firehose
 		"AWS::KinesisFirehose::DeliveryStream":
-			wrap(firehoseClient.ListTagsForDeliveryStreamRequest,
-				InputParam{"DeliveryStreamName", physicalResourceId}),
+		wrap(firehoseClient.ListTagsForDeliveryStreamRequest,
+			InputParam{"DeliveryStreamName", physicalResourceId}),
 		// Cloudwatch Logs
 		"AWS::Logs::LogGroup":
-			wrap(cloudwatchlogsClient.ListTagsLogGroupRequest,
-				InputParam{"LogGroupName", physicalResourceId}),
+		wrap(cloudwatchlogsClient.ListTagsLogGroupRequest,
+			InputParam{"LogGroupName", physicalResourceId}),
 		// Cloudwatch
 		"AWS::Cloudwatch::Alarm":
-			wrap(cloudwatchClient.ListTagsForResourceRequest,
-				InputParam{"ResourceARN", arnF3(region, account, "cloudwatch", "alarm")}),
+		wrap(cloudwatchClient.ListTagsForResourceRequest,
+			InputParam{"ResourceARN", arnF3(region, account, "cloudwatch", "alarm")}),
 		// Events
 		"AWS::Events::Rule":
-			wrap(cloudwatcheventsClient.ListTagsForResourceRequest,
-				InputParam{"ResourceARN", arnF2(region, account, "events", "rule")}),
+		wrap(cloudwatcheventsClient.ListTagsForResourceRequest,
+			InputParam{"ResourceARN", arnF2(region, account, "events", "rule")}),
 		// Config
 		"AWS::Config::ConfigRule":
-			wrap(configserviceClient.ListTagsForResourceRequest,
-				InputParam{"ResourceArn", arnF2(region, account, "config", "config-rule")}),
+		wrap(configserviceClient.ListTagsForResourceRequest,
+			InputParam{"ResourceArn", arnF2(region, account, "config", "config-rule")}),
 		// KMS
 		"AWS::KMS::Key":
-			wrap(kmsClient.ListResourceTagsRequest,
-				InputParam{"KeyId", physicalResourceId}),
+		wrap(kmsClient.ListResourceTagsRequest,
+			InputParam{"KeyId", physicalResourceId}),
 		// DMS,
 		"AWS::DMS::EventSubscription":
-			wrap(dmsClient.ListTagsForResourceRequest,
-				InputParam{"ResourceArn", arnF3(region, account, "dms", "es")}),
+		wrap(dmsClient.ListTagsForResourceRequest,
+			InputParam{"ResourceArn", arnF3(region, account, "dms", "es")}),
+	}
 
-		//////// TAGS NOT SUPPORTED ////////
+	tagsNotSupported:= map[string]struct{}{
 		// Lambda
-		"AWS::Lambda::Permission": nop("AWS::Lambda::Permission"),
+		"AWS::Lambda::Permission": {},
 		// Service Catalog
-		"AWS::ServiceCatalog::LaunchRoleConstraint":          nop("AWS::ServiceCatalog::LaunchRoleConstraint"),
-		"AWS::ServiceCatalog::PortfolioPrincipalAssociation": nop("AWS::ServiceCatalog::PortfolioPrincipalAssociation"),
-		"AWS::ServiceCatalog::PortfolioProductAssociation":   nop("AWS::ServiceCatalog::PortfolioProductAssociation"),
-		"AWS::ServiceCatalog::TagOptionAssociation":          nop("AWS::ServiceCatalog::TagOptionAssociation"),
-		"AWS::ServiceCatalog::TagOption":                     nop("AWS::ServiceCatalog::TagOption"),
+		"AWS::ServiceCatalog::LaunchRoleConstraint":          {},
+		"AWS::ServiceCatalog::PortfolioPrincipalAssociation": {},
+		"AWS::ServiceCatalog::PortfolioProductAssociation":   {},
+		"AWS::ServiceCatalog::TagOptionAssociation":          {},
+		"AWS::ServiceCatalog::TagOption":                     {},
 		// S3
-		"AWS::S3::BucketPolicy": nop("AWS::S3::BucketPolicy"),
+		"AWS::S3::BucketPolicy": {},
 		// IAM
-		"AWS::IAM::InstanceProfile": nop("AWS::IAM::InstanceProfile"),
-		"AWS::IAM::Policy":          nop("AWS::IAM::Policy"),
+		"AWS::IAM::InstanceProfile": {},
+		"AWS::IAM::Policy":          {},
 		// SNS
-		"AWS::SNS::Subscription": nop("AWS::SNS::Subscription"),
-		"AWS::SNS::TopicPolicy":  nop("AWS::SNS::TopicPolicy"),
+		"AWS::SNS::Subscription": {},
+		"AWS::SNS::TopicPolicy":  {},
 		// EC2
-		"AWS::EC2::VPCEndpoint":                 nop("AWS::EC2::VPCEndpoint"),
-		"AWS::EC2::SubnetRouteTableAssociation": nop("AWS::EC2::SubnetRouteTableAssociation"),
-		"AWS::EC2::SecurityGroupIngress":        nop("AWS::EC2::SecurityGroupIngress"),
+		"AWS::EC2::VPCEndpoint":                 {},
+		"AWS::EC2::SubnetRouteTableAssociation": {},
+		"AWS::EC2::SecurityGroupIngress":        {},
 		// Glue
-		"AWS::Glue::Database":              nop("AWS::Glue::Database"),
-		"AWS::Glue::SecurityConfiguration": nop("AWS::Glue::SecurityConfiguration"),
+		"AWS::Glue::Database":              {},
+		"AWS::Glue::SecurityConfiguration": {},
 		// Batch
-		"AWS::Batch::JobDefinition":      nop("AWS::Batch::JobDefinition"),
-		"AWS::Batch::JobQueue":           nop("AWS::Batch::JobQueue"),
-		"AWS::Batch::ComputeEnvironment": nop("AWS::Batch::ComputeEnvironment"),
+		"AWS::Batch::JobDefinition":      {},
+		"AWS::Batch::JobQueue":           {},
+		"AWS::Batch::ComputeEnvironment": {},
 		// Logs
-		"AWS::Logs::LogStream": nop("AWS::Logs::LogStream"),
+		"AWS::Logs::LogStream": {},
 		// CloudFormation
-		"AWS::CloudFormation::Macro": nop("AWS::CloudFormation::Macro"),
+		"AWS::CloudFormation::Macro": {},
 	}
 
 	searchs := os.Args[1:]
 	report := NewReporter()
 
+	fmt.Print("\nResources supported: ")
+	for k, _ := range lookups {
+		fmt.Print(k, ",")
+	}
+	fmt.Print("\nResources not supporting tags: ")
+	for k, _ := range tagsNotSupported {
+		fmt.Print(k, ",")
+	}
+
 	for _, s := range searchs {
 		for i, res := range getStackResources(ctx, cfg, s) {
-			if customResource(*res.ResourceType) {
+			_, noSupport := tagsNotSupported[*res.ResourceType]
+			if customResource(*res.ResourceType) || noSupport {
 				fmt.Fprintln(os.Stderr, (&TagsNotSupportedError{*res.ResourceType}).Error())
 				report.NotSupported(*res.ResourceType, *res.LogicalResourceId, *res.StackName, s)
 				continue
@@ -217,7 +228,7 @@ func main() {
 			} else {
 				err := NotImplementedError{*res.ResourceType}
 				fmt.Fprintln(os.Stderr, err.Error(), Prettify(res))
-				//panic(err.Error())
+				panic(err.Error())
 			}
 
 			if i% 1000 == 0 {
